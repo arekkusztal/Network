@@ -1,3 +1,35 @@
+/*-
+ *   BSD LICENSE
+ *
+ *   Copyright(c) 2016 Arek Kusztal. All rights reserved.
+ *
+ *   Redistribution and use in source and binary forms, with or without
+ *   modification, are permitted provided that the following conditions
+ *   are met:
+ *
+ *	 * Redistributions of source code must retain the above copyright
+ *	   notice, this list of conditions and the following disclaimer.
+ *	 * Redistributions in binary form must reproduce the above copyright
+ *	   notice, this list of conditions and the following disclaimer in
+ *	   the documentation and/or other materials provided with the
+ *	   distribution.
+ *	 * Neither the name of Network Project nor the names of its
+ *	   contributors may be used to endorse or promote products derived
+ *	   from this software without specific prior written permission.
+ *
+ *   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ *   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ *   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ *   A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ *   OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ *   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ *   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ *   DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ *   THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *   (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,27 +68,27 @@ struct arp {
 	uint8_t sender_ip[4];
 	uint8_t target_mac[6];
 	uint8_t target_ip[4];
-};
+} __attribute__((packed));
 
 struct ethernet2 {
 	uint8_t dst[6];
 	uint8_t src[6];
 	uint16_t protocol;
-};
+} __attribute__((packed));
 
-struct arp arp_hdr;
-#define ETH2_LENGTH		14
+struct arp_frame {
+	struct ethernet2 eth2;
+	struct arp arp;
+} __attribute__((packed));
 
 int main(int argc, char *argv[])
 {
 	int ret;
 	int sd;
 	struct ifreq *ifr;
-	struct addrinfo hints, *res;
-	struct sockaddr_ll addr_ll;
-	uint8_t *src_MAC = malloc(6);
-	uint8_t *frame = malloc(128);
-
+	struct sockaddr_ll device;
+	struct arp_frame *arp_frame =
+			malloc(sizeof(struct arp_frame));
 
 	if (geteuid()) {
 		printf("\n----\nError 1: Root yourself"
@@ -82,49 +114,29 @@ int main(int argc, char *argv[])
 		return -2;
 	}
 
-	memset(&addr_ll, 0, sizeof(addr_ll));
-	addr_ll.sll_ifindex = if_nametoindex(ehtdev);
-	if (!addr_ll.sll_ifindex) {
+	memset(&device, 0, sizeof(device));
+	device.sll_ifindex = if_nametoindex(ehtdev);
+	if (!device.sll_ifindex) {
 		printf("\n----\nError 1: Error on name to index"
 				"\nExiting...\n");
 		return -1;
 	}
 
-	memset(&hints, 0, sizeof(struct addrinfo));
-	hints.ai_family = AF_INET;
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_flags |= AI_CANONNAME;
+	device.sll_family = AF_PACKET;
+	memcpy(device.sll_addr, ifr->ifr_hwaddr.sa_data, 6);
 
-	ret = getaddrinfo(target_ip, NULL, &hints, &res);
-	if (ret) {
-		printf("\n----\nError 1: Error on getaddrinf"
-				"\nExiting...\n");
-		return -1;
-	}
+	memset(arp_frame->eth2.dst, 0xFF, 6);
+	memcpy(arp_frame->eth2.src, ifr->ifr_hwaddr.sa_data, 6);
+	arp_frame->eth2.protocol = htons(0x0806);
 
-	addr_ll.sll_family = AF_PACKET;
-	memcpy(addr_ll.sll_addr, ifr->ifr_hwaddr.sa_data, 6);
-	addr_ll.sll_halen;
-
-	memset(frame, 0xFF, 6);
-	memcpy(frame + 6, ifr->ifr_hwaddr.sa_data, 6);
-	frame[12] = 0x08;
-	frame[13] = 0x06;
-
-	arp_hdr.hardware_type = htons(1);
-	arp_hdr.protocol_type = htons(ETH_P_IP);
-	arp_hdr.hardware_size = 6;
-	arp_hdr.protocol_size = 4;
-	arp_hdr.operation = htons(1);
-	memcpy(arp_hdr.sender_mac, ifr->ifr_hwaddr.sa_data, 6);
-	inet_pton(AF_INET, sender_ip, arp_hdr.sender_ip);
-	inet_pton(AF_INET, target_ip, arp_hdr.target_ip);
-
-	struct sockaddr_in *temp = (struct sockaddr_in *)&ifr->ifr_addr;
-	hex_dump("Jebane HP", (uint8_t *)&temp->sin_addr  ,6 ,16);
-
-
-	memcpy(frame + ETH2_LENGTH, &arp_hdr, sizeof(struct arp));
+	arp_frame->arp.hardware_type = htons(1);
+	arp_frame->arp.protocol_type = htons(0x800);
+	arp_frame->arp.hardware_size = 6;
+	arp_frame->arp.protocol_size = 4;
+	arp_frame->arp.operation = htons(1);
+	memcpy(arp_frame->arp.sender_mac, ifr->ifr_hwaddr.sa_data, 6);
+	inet_pton(AF_INET, sender_ip, arp_frame->arp.sender_ip);
+	inet_pton(AF_INET, target_ip, arp_frame->arp.target_ip);
 
 	sd = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
 	if (sd < 0) {
@@ -134,8 +146,8 @@ int main(int argc, char *argv[])
 		return -3;
 	}
 
-	ret = sendto(sd, frame, ETH2_LENGTH + sizeof(struct arp), 0,
-			(struct sockaddr *)&addr_ll, sizeof(addr_ll));
+	ret = sendto(sd, arp_frame, sizeof(*arp_frame), 0,
+			(struct sockaddr *)&device, sizeof(device));
 
 	if (ret < 0) {
 		printf("\n----\nError 3: Error on sending"
@@ -144,9 +156,7 @@ int main(int argc, char *argv[])
 		return -4;
 
 	}
-	hex_dump("Sent", frame ,sizeof(frame) + sizeof(struct arp) ,16);
-	hex_dump("Addr", (uint8_t *)&addr_ll ,sizeof(addr_ll) ,16);
-
+	hex_dump("Arp Eth", (uint8_t *)arp_frame ,sizeof(*arp_frame) ,16);
 
 	close(sd);
 	return 0;

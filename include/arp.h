@@ -18,16 +18,16 @@ enum HARDWARE_TYPE {
 };
 
 struct arp {
-	uint16_t hardware_type,
-	uint16_t protocol_type,
-	uint8_t hardware_size,
-	uint8_t protocol_size,
-	uint16_t operation,
-	uint8_t sender_mac[6],
-	uint8_t sender_ip[4],
-	uint8_t target_mac[6],
-	uint8_t target_ip[4],
-};
+	uint16_t hardware_type;
+	uint16_t protocol_type;
+	uint8_t hardware_size;
+	uint8_t protocol_size;
+	uint16_t operation;
+	uint8_t sender_mac[6];
+	uint8_t sender_ip[4];
+	uint8_t target_mac[6];
+	uint8_t target_ip[4];
+} __attribute__((packed));
 
 
 
