@@ -30,8 +30,36 @@
  *   OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*** SMTP header file */
+/* RFC 821 */
+/* RFC 2821 */
+
 #ifndef SMTP_UTILS_H
 #define SMTP_UTILS_H
+
+
+/*** Response params */
+#define HELP_REPLY		"221"
+#define HELP_MESSAGE 	"214"
+#define SRV_READY		"220"
+#define SRV_CLOSING		"221"
+#define RQ_MAIL_OK		"250"
+#define FORWARD			"251"
+#define START_INPUT		"354"
+#define SRV_NAN			"421"
+#define MBOX_UNAVAIL	"450"
+#define ABORTED			"451"
+#define INSUFFISIANT	"452"
+#define SYNTAX_ERR		"500"
+#define BAD_ARG			"501"
+#define NOT_IMPL		"502"
+#define BAD_SEQ			"503"
+#define PARAM_NOT_IMPL  "504"
+#define NOT_FOUND		"550"
+#define USER_NOT_LOCAL	"551"
+#define MAIL_ABORTED	"552"
+#define NOT_ALLOWED		"553"
+#define TRAN_FAILED		"554"
 
 struct smtp_cmd {
 	uint8_t cmd[5];
@@ -44,6 +72,8 @@ struct smtp_resp {
 };
 
 extern const char B_64[];
+
+#define CRLF	"\r\n"
 
 uint32_t
 SMTP_strlen(uint8_t *msg);

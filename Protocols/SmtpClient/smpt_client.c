@@ -44,7 +44,8 @@
 
 #include "smtp.h"
 
-#define SERVER_1	"212.77.101.1"//"smtp.wp.pl"
+#define SERVER_1	"127.0.0.1"//"smtp.wp.pl"
+#define SERVER_2	"212.77.101.1"//"smtp.wp.pl"
 #define err(arg)	printf("Error %d",arg); \
 					return -(arg);
 #define SMTP_PORT	25
