@@ -18,6 +18,8 @@
 void hex_dump(const char *def, uint8_t *data, uint16_t len,
         uint16_t br);
 
+
+
 int set_socket(struct ifreq *if_req, char *name)
 {
     int sd;
@@ -34,69 +36,126 @@ int set_socket(struct ifreq *if_req, char *name)
     return sd;
 }
 
-int get_IFACE_IPv4(char *name)
+static inline int
+if_IOCTL(struct ifreq *if_req, unsigned long SIOC, char *name)
 {
     int ret;
     int sd;
-    char IP[4];
-    struct ifreq *if_req;
-
-    if_req = malloc(sizeof(struct ifreq));
 
     sd = set_socket(if_req, name);
     if (sd < 0) {
         return sd;
     }
 
-    ret = ioctl(sd, SIOCGIFADDR, if_req);
+    ret = ioctl(sd, SIOC, if_req);
     if (ret < 0) {
         printf("\nError on ioctl");
         return -1;
     }
 
-    memcpy(IP, if_req->ifr_addr.sa_data+2, 4);
-    printf("\nInterface: %s", name);
-    hex_dump("IP address", IP, 4, 4);
-
     close(sd);
+
+}
+
+int get_IFACE_IPv4(char *IP, char *name)
+{
+    int ret;
+    struct ifreq *if_req;
+
+    if_req = malloc(sizeof(struct ifreq));
+
+    if (ret = if_IOCTL(if_req, SIOCGIFADDR, name)) {
+        return ret;
+    }
+
+    memcpy(IP, if_req->ifr_addr.sa_data+2, 4);
+
     free(if_req);
 
     return 0;
 }
 
-int get_MAC_addr(char *name)
+int get_MAC_addr(char *MAC_addr, char *name)
 {
     int ret;
-    int sd;
-    char MAC_addr[6];
     struct ifreq *if_req;
 
     if_req = malloc(sizeof(struct ifreq));
 
-    sd = set_socket(if_req, name);
-    if (sd < 0) {
-        return sd;
-    }
-
-    ret = ioctl(sd, SIOCGIFHWADDR, if_req);
-    if (ret < 0) {
-        printf("\nError on ioctl");
-        return -1;
+    if (if_IOCTL(if_req, SIOCGIFHWADDR, name)) {
+        return ret;
     }
 
     memcpy(MAC_addr, if_req->ifr_hwaddr.sa_data, 6);
-    printf("\nInterface: %s", name);
-    hex_dump("MAC address", MAC_addr, 6, 6);
 
-    close(sd);
     free(if_req);
+
+    return 0;
+}
+
+int get_IFACE_flags(short *FLAGS, char *name)
+{
+    int ret;
+    struct ifreq *if_req;
+
+    if_req = malloc(sizeof(struct ifreq));
+
+    if (if_IOCTL(if_req, SIOCGIFFLAGS, name)) {
+        return ret;
+    }
+
+    *FLAGS = if_req->ifr_flags;
+
+    free(if_req);
+
+    return 0;
+}
+
+int check_FLAGS(short *FLAGS, char *name)
+{
+    printf("\nInterface: %s\n", name);
+    get_IFACE_flags(FLAGS, name);
+    if (*FLAGS & IFF_UP)
+        printf("IFF_UP ");
+    if (*FLAGS & IFF_BROADCAST)
+        printf("IFF_BROADCAST ");
+    if (*FLAGS & IFF_DEBUG)
+        printf("IFF_DEBUG ");
+    if (*FLAGS & IFF_LOOPBACK)
+        printf("IFF_LOOPBACK ");
+    if (*FLAGS & IFF_POINTOPOINT)
+        printf("IFF_POINTOPOINT ");
+    if (*FLAGS & IFF_NOTRAILERS)
+        printf("IFF_NOTRAILERS ");
+    if (*FLAGS & IFF_RUNNING)
+        printf("IFF_RUNNING ");
+    if (*FLAGS & IFF_NOARP)
+        printf("IFF_NOARP ");
+    if (*FLAGS & IFF_PROMISC)
+        printf("IFF_PROMISC ");
+    if (*FLAGS & IFF_ALLMULTI)
+        printf("IFF_ALLMULTI ");
+    if (*FLAGS & IFF_MASTER)
+        printf("IFF_MASTER ");
+    if (*FLAGS & IFF_SLAVE)
+        printf("IFF_SLAVE ");
+    if (*FLAGS & IFF_MULTICAST)
+        printf("IFF_MULTICAST ");
+    if (*FLAGS & IFF_PORTSEL)
+        printf("IFF_PORTSEL ");
+    if (*FLAGS & IFF_AUTOMEDIA)
+        printf("IFF_AUTOMEDIA ");
+    if (*FLAGS & IFF_DYNAMIC)
+        printf("IFF_DYNAMIC ");
+
+    printf("\n");
+
     return 0;
 }
 
 int get_IFACE_byindex(int index)
 {
     int ret, sd;
-    char name[IFNAMSIZ];
 
     struct ifreq *if_req;\
 
@@ -126,16 +185,28 @@ int get_IFACE_byindex(int index)
 
 int main(int argc, char *argv[])
 {
-    int ret;
-    int sd;
     if (getuid()) {
         printf("\nRoot yourself\n");
         return -1;
     }
 
-    get_MAC_addr(DEVICE);
-    get_IFACE_IPv4(DEVICE);
+    char MAC_addr[6];
+    char IP[4];
+    short FLAGS;
+
+    get_MAC_addr(MAC_addr, DEVICE);
+
+    printf("\nInterface: %s", DEVICE);
+    hex_dump("MAC address", MAC_addr, 6, 6);
+
+    get_IFACE_IPv4(IP, DEVICE);
+
+    printf("\nInterface: %s", DEVICE);
+    hex_dump("IP address", IP, 4, 4);
+
     get_IFACE_byindex(1);
+
+    check_FLAGS(&FLAGS, DEVICE);
 
     return 0;
 }
