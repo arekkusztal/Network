@@ -44,12 +44,11 @@
 
 #include "smtp.h"
 
-#define SERVER_1	"127.0.0.1"//"smtp.wp.pl"
-#define SERVER_2	"212.77.101.1"//"smtp.wp.pl"
+//#define SERVER_1	"127.0.0.1"//"smtp.wp.pl"
+#define SERVER_1	"212.77.101.1"//"smtp.wp.pl"
 #define err(arg)	printf("Error %d",arg); \
 					return -(arg);
 #define SMTP_PORT	25
-#define EHLO 	"EHLO "
 
 #define BUF_LEN	1024
 uint8_t ip[4];
@@ -60,10 +59,12 @@ int SMTP_send_req(int sd, uint8_t *cmd, uint8_t *param)
 	int ret;
 	struct smtp_cmd req;
 	memcpy(req.cmd, cmd, SMTP_strlen(cmd) + 1);
-	memcpy(req.param, param, SMTP_strlen(param) + 2);
+    memcpy(req.param, param, SMTP_strlen(param) + 2);
+
 	ret = write(sd, (uint8_t *)&req, SMTP_strlen(cmd) +
 			SMTP_strlen(param) + 3);
-	if (ret != 12) {
+    if (ret != SMTP_strlen(cmd) +
+            SMTP_strlen(param) + 3) {
 		printf("Error 3");
 		return -1;
 	}
@@ -74,7 +75,7 @@ int SMTP_send_req(int sd, uint8_t *cmd, uint8_t *param)
 struct smtp_resp resp;
 int SMTP_set_connection(int sd)
 {
-	int ret;
+    int ret;
 #define USLEN	32
 	char username[32];
 	char password[32];
@@ -85,18 +86,18 @@ int SMTP_set_connection(int sd)
 #ifdef TEST
 	memset(username, 0, 32);
 	memset(password, 0, 32);
-	memcpy(username, "", 8);
-	memcpy(password, "", 6);
+    memcpy(username, "arekrtsw", 8);
+    memcpy(password, "orzel5", 6);
 #endif
 
 	/* First response commant should be 220 (Service Ready) */
-	ret = read(sd, (uint8_t *)&resp, BUF_LEN);
+    ret = read(sd, (uint8_t *)&resp, BUF_LEN);
 	if (ret < 0) {
 		printf("\nError ");
 		return 1;
 	}
 	resp.cmd[3] = '\0';
-	if (memcmp(resp.cmd, "220", 3) !=0 ) {
+    if (memcmp(resp.cmd, SRV_READY, 3) !=0 ) {
 		printf("\nError 1");
 		return 1;
 
@@ -110,11 +111,11 @@ int SMTP_set_connection(int sd)
 	}
 
 	/* Second | Mail action ok (250) */
-	ret = read(sd, (uint8_t *)&resp, BUF_LEN);
-	if (ret < 0) {
+    ret = read(sd, (uint8_t *)&resp, BUF_LEN);
+    if (ret < 0) {
 		printf("\nError ");
 		return 1;
-	}
+    }
 	resp.cmd[3] = '\0';
 	if (memcmp(resp.cmd, "250", 3) !=0 ) {
 		printf("\nError 1");
@@ -128,7 +129,7 @@ int SMTP_set_connection(int sd)
 	}
 
 	/* If eveything ok, we have got 334 ->'Username:' in base64 */
-	ret = read(sd, (uint8_t *)&resp, BUF_LEN);
+    ret = read(sd, (uint8_t *)&resp, BUF_LEN);
 	if (ret < 0) {
 		printf("\nError ");
 		return 1;

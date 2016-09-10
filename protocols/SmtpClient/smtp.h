@@ -61,14 +61,25 @@
 #define NOT_ALLOWED		"553"
 #define TRAN_FAILED		"554"
 
+/* Config -- adding space at the end */
+
+#define EHLO 	"EHLO "
+#define HELO 	"HELO "
+#define HELO 	"MAIL "
+
 struct smtp_cmd {
 	uint8_t cmd[5];
-	uint8_t param[60];
+    uint8_t param[507];
+};
+
+struct SMTP_response {
+    uint8_t cmd[4];
+    uint8_t param[];
 };
 
 struct smtp_resp {
 	uint8_t cmd[4];
-	uint8_t param[60];
+    uint8_t param[508];
 };
 
 extern const char B_64[];

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -71,6 +72,33 @@ int get_IFACE_IPv4(char *IP, char *name)
     memcpy(IP, if_req->ifr_addr.sa_data+2, 4);
 
     free(if_req);
+
+    return 0;
+}
+
+int set_IFACE_IPv4(char *IP, char *name)
+{
+    int sd;
+    struct ifreq *ifreq;
+    struct sockaddr_in sa;
+
+    ifreq = malloc(sizeof(struct sockaddr_in));
+
+    sd = socket(AF_INET, SOCK_STREAM, 0);
+
+    strncpy(ifreq->ifr_name, name, IFNAMSIZ);
+
+    memset(&sa, 0, sizeof(struct sockaddr));
+    sa.sin_family = AF_INET;
+    sa.sin_port = 0;
+    sa.sin_addr.s_addr = inet_addr(IP);
+
+    memcpy(&ifreq->ifr_addr, &sa,
+           sizeof(struct sockaddr));
+
+    ioctl(sd, SIOCSIFADDR, ifreq);
+
+    close(sd);
 
     return 0;
 }
@@ -192,21 +220,23 @@ int main(int argc, char *argv[])
 
     char MAC_addr[6];
     char IP[4];
+    char *IP_2 = "192.168.1.98";
     short FLAGS;
 
-    get_MAC_addr(MAC_addr, DEVICE);
+   /* get_MAC_addr(MAC_addr, DEVICE);
 
     printf("\nInterface: %s", DEVICE);
-    hex_dump("MAC address", MAC_addr, 6, 6);
+    hex_dump("MAC address", MAC_addr, 6, 6); */
 
-    get_IFACE_IPv4(IP, DEVICE);
+    set_IFACE_IPv4(IP_2, DEVICE);
+ /*   get_IFACE_IPv4(IP, DEVICE);
 
     printf("\nInterface: %s", DEVICE);
     hex_dump("IP address", IP, 4, 4);
 
     get_IFACE_byindex(1);
 
-    check_FLAGS(&FLAGS, DEVICE);
+    check_FLAGS(&FLAGS, DEVICE); */
 
     return 0;
 }
