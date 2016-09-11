@@ -11,10 +11,11 @@
 
 char        buffer[CHUNKSIZE];
 
-void sig_handler(int signo)
-{
-    printf("\nChild done");
-    while (waitpid(-1, NULL, WNOHANG) > 0);
+void sig_handler(int sig) {
+    pid_t p;
+
+    while ((p = waitpid(-1, NULL, WNOHANG)) <= 0);
+    printf("\nExiting process pid = %d\n", p);
 }
 
 int main()
@@ -22,6 +23,11 @@ int main()
     int pid;
     int     sockfd_main,sockfd_new;
     struct  sockaddr_in addr_main;
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sig_handler;
+    sigaction(SIGCHLD, &sa, NULL);
 
     if ( (sockfd_main = socket(AF_INET,SOCK_STREAM,IPPROTO_TCP)) < 0)
     {
@@ -52,7 +58,6 @@ int main()
         return 1;
     }
 
-    signal(SIGCHLD, sig_handler);
     while (1)
     {
         sockfd_new = accept(sockfd_main,NULL,NULL);
