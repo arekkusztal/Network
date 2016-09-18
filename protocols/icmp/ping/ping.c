@@ -14,6 +14,7 @@
 
 #define DST_ADDR    "8.8.8.8"
 
+
 int main(int argc, char *argv[])
 {
     int i, ret;
@@ -46,16 +47,19 @@ int main(int argc, char *argv[])
     inet_pton(AF_INET, DST_ADDR, &sin.sin_addr);
 
 
-    icmp_hdr.icmp_type  = 8;
+    icmp_hdr.icmp_type  = ICMP_ECHO;
     icmp_hdr.icmp_code  = 0;
-    icmp_hdr.icmp_cksum = 0;
+    icmp_hdr.icmp_cksum = htons(0xF7FE);
     icmp_hdr.icmp_id    = 0;
-    icmp_hdr.icmp_seq   = 0;
+    icmp_hdr.icmp_seq   = htons(1);
+    icmp_hdr.icmp_ttime = 0;
 
-    if ( (ret < sendto(sock_icmp, &icmp_hdr, sizeof(icmp_hdr), 0,
+    if ( (ret < sendto(sock_icmp, &icmp_hdr, sizeof(struct icmphdr), 0,
                        (struct sockaddr *)&sin, sizeof(sin)))) {
         perror("sendto");
     }
+
+    printf("\n%u", sizeof(icmp_hdr));
 
     close(sock_icmp);
 
