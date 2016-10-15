@@ -13,24 +13,41 @@
 
 int main(int argc, char *argv[])
 {
-        int sd, ret;
-        struct sockaddr_in sin;
+	int sd, ret;
+	struct msghdr msg;
 
-	sd = socket(AF_CHMLN, SOCK_STREAM, IPPROTO_IP);
+	struct sockaddr_in sina;
+	sd = socket(AF_CHMLN, SOCK_DGRAM, IPPROTO_IP);
 	if (sd < 0) {
 		perror("socket");
 		return 1;
 	}
 
-        sin.sin_family = AF_CHMLN;
-        sin.sin_port = 1683;
-        inet_pton(AF_INET, dest_addr, &sin.sin_addr);
+	struct iovec iov[1];
+	sina.sin_family = AF_INET;
+	sina.sin_port = htons(1683);
+	inet_pton(AF_INET, dest_addr, &sina.sin_addr);
+	printf("\naddr = %d",(int)sina.sin_addr.s_addr);
+	char data[] = "areczek";
 
-        ret = connect(sd, (struct sockaddr *)&sin, sizeof(struct sockaddr));
-        if (ret < 0) {
-            perror("connect");
-                return 2;
-        }
+	iov[0].iov_base = data;
+	iov[0].iov_len = sizeof(data);
+
+	msg.msg_name = &sina;
+	msg.msg_namelen = sizeof(sina);
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = 0;
+	msg.msg_controllen = 0;
+
+
+  //  ret = connect(sd, (struct sockaddr *)&sina, sizeof(struct sockaddr));
+
+	ret = sendmsg(sd, &msg, 0);
+	if (ret < 0) {
+		perror("connect");
+			return 2;
+	}
 
 	return 0;
 }
