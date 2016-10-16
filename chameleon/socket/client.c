@@ -26,7 +26,7 @@ int main(int argc, char *argv[])
 	struct iovec iov[1];
 	sina.sin_family = AF_INET;
 	sina.sin_port = htons(1683);
-	inet_pton(AF_INET, dest_addr, &sina.sin_addr);
+	inet_pton(AF_CHMLN, dest_addr, &sina.sin_addr);
 	printf("\naddr = %d",(int)sina.sin_addr.s_addr);
 	char data[] = "areczek";
 
