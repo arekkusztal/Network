@@ -132,8 +132,8 @@ send:
 	 */
 
 
+	skb->data[0] = 0x45;
 	dump_udp(skb,2);
-	skb->data[32] = 1;
 	err = ip_send_skb(sock_net(sk), skb);
 	printk("ip_send_skb output = %d", err);
 	if (err) {
@@ -163,89 +163,32 @@ int udp_sendmsg_2(struct sock *sk, struct msghdr *msg, size_t len)
 	__be16 dport;
 	u8  tos;
 	int err, is_udplite = IS_UDPLITE(sk);
-	int corkreq = up->corkflag || msg->msg_flags&MSG_MORE;
 	int (*getfrag)(void *, char *, int, int, int, struct sk_buff *);
 	struct sk_buff *skb;
 	struct ip_options_data opt_copy;
 
-	printk("UDP: Now i am in the module xP\n");
 
-	if (len > 0xFFFF)
-		return -EMSGSIZE;
+	getfrag = ip_generic_getfrag;
 
-	/*
-	 *	Check the flags.
-	 */
+	ulen += sizeof(struct udphdr);
 
-	if (msg->msg_flags & MSG_OOB) /* Mirror BSD error message compatibility */
-		return -EOPNOTSUPP;
+	if (msg->msg_name) {
+		DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
+
+		daddr = usin->sin_addr.s_addr;
+		dport = usin->sin_port;
+	}
+
 
 	ipc.opt = NULL;
 	ipc.tx_flags = 0;
 	ipc.ttl = 0;
 	ipc.tos = -1;
-
-	getfrag = is_udplite ? udplite_getfrag : ip_generic_getfrag;
-
-	fl4 = &inet->cork.fl.u.ip4;
-	if (up->pending) {
-		/*
-		 * There are pending frames.
-		 * The socket lock must be held while it's corked.
-		 */
-		lock_sock(sk);
-		if (likely(up->pending)) {
-			if (unlikely(up->pending != AF_INET)) {
-				release_sock(sk);
-				return -EINVAL;
-			}
-			goto do_append_data;
-		}
-		release_sock(sk);
-	}
-	ulen += sizeof(struct udphdr);
-
-	/*
-	 *	Get and verify the address.
-	 */
-	if (msg->msg_name) {
-		DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
-		if (msg->msg_namelen < sizeof(*usin))
-			return -EINVAL;
-		if (usin->sin_family != AF_INET) {
-			if (usin->sin_family != AF_UNSPEC)
-				return -EAFNOSUPPORT;
-		}
-
-		daddr = usin->sin_addr.s_addr;
-		dport = usin->sin_port;
-		if (dport == 0)
-			return -EINVAL;
-	} else {
-		if (sk->sk_state != TCP_ESTABLISHED)
-			return -EDESTADDRREQ;
-		daddr = inet->inet_daddr;
-		dport = inet->inet_dport;
-		/* Open fast path for connected socket.
-		   Route will not be used, if at least one option is set.
-		 */
-		connected = 1;
-	}
-
 	ipc.sockc.tsflags = sk->sk_tsflags;
 	ipc.addr = inet->inet_saddr;
 	ipc.oif = sk->sk_bound_dev_if;
 
-	if (msg->msg_controllen) {
-		err = ip_cmsg_send(sk, msg, &ipc, sk->sk_family == AF_INET6);
-		if (unlikely(err)) {
-			kfree(ipc.opt);
-			return err;
-		}
-		if (ipc.opt)
-			free = 1;
-		connected = 0;
-	}
+	printk("\nipc.opt = %p\n", ipc.opt);
 	if (!ipc.opt) {
 		struct ip_options_rcu *inet_opt;
 
@@ -271,24 +214,7 @@ int udp_sendmsg_2(struct sock *sk, struct msghdr *msg, size_t len)
 		connected = 0;
 	}
 	tos = get_rttos(&ipc, inet);
-	if (sock_flag(sk, SOCK_LOCALROUTE) ||
-	    (msg->msg_flags & MSG_DONTROUTE) ||
-	    (ipc.opt && ipc.opt->opt.is_strictroute)) {
-		tos |= RTO_ONLINK;
-		connected = 0;
-	}
 
-	if (ipv4_is_multicast(daddr)) {
-		if (!ipc.oif)
-			ipc.oif = inet->mc_index;
-		if (!saddr)
-			saddr = inet->mc_addr;
-		connected = 0;
-	} else if (!ipc.oif)
-		ipc.oif = inet->uc_index;
-
-	if (connected)
-		rt = (struct rtable *)sk_dst_check(sk, 0);
 	if (!rt) {
 		struct net *net = sock_net(sk);
 		__u8 flow_flags = inet_sk_flowi_flags(sk);
@@ -300,83 +226,23 @@ int udp_sendmsg_2(struct sock *sk, struct msghdr *msg, size_t len)
 				   flow_flags,
 				   faddr, saddr, dport, inet->inet_sport);
 
-		if (!saddr && ipc.oif) {
-			err = l3mdev_get_saddr(net, ipc.oif, fl4);
-			if (err < 0)
-				goto out;
-		}
-
 		security_sk_classify_flow(sk, flowi4_to_flowi(fl4));
 		rt = ip_route_output_flow(net, fl4, sk);
-		if (IS_ERR(rt)) {
-			err = PTR_ERR(rt);
-			rt = NULL;
-			if (err == -ENETUNREACH)
-				IP_INC_STATS(net, IPSTATS_MIB_OUTNOROUTES);
-			goto out;
-		}
-		err = -EACCES;
-		if ((rt->rt_flags & RTCF_BROADCAST) &&
-		    !sock_flag(sk, SOCK_BROADCAST))
-			goto out;
-		if (connected)
-			sk_dst_set(sk, dst_clone(&rt->dst));
 	}
 
-	if (msg->msg_flags&MSG_CONFIRM)
-		goto do_confirm;
-back_from_confirm:
 	saddr = fl4->saddr;
 	if (!ipc.addr)
 		daddr = ipc.addr = fl4->daddr;
 
-	/* Lockless fast path for the non-corking case. */
-	if (!corkreq) {
-		skb = ip_make_skb(sk, fl4, getfrag, msg, ulen,
-				  sizeof(struct udphdr), &ipc, &rt,
-				  msg->msg_flags);
-		err = PTR_ERR(skb);
+	skb = ip_make_skb(sk, fl4, getfrag, msg, ulen,
+			  sizeof(struct udphdr), &ipc, &rt,
+			  msg->msg_flags);
+	err = PTR_ERR(skb);
 
+	if (!IS_ERR_OR_NULL(skb))
+		err = udp_send_skb_2(skb, fl4);
 
-
-
-
-		if (!IS_ERR_OR_NULL(skb))
-			err = udp_send_skb_2(skb, fl4);
-		goto out;
-	}
-	lock_sock(sk);
-	if (unlikely(up->pending)) {
-		/* The socket is already corked while preparing it. */
-		/* ... which is an evident application bug. --ANK */
-		release_sock(sk);
-
-		net_dbg_ratelimited("cork app bug 2\n");
-		err = -EINVAL;
-		goto out;
-	}
-	/*
-	 *	Now cork the socket to pend data.
-	 */
-	fl4 = &inet->cork.fl.u.ip4;
-	fl4->daddr = daddr;
-	fl4->saddr = saddr;
-	fl4->fl4_dport = dport;
-	fl4->fl4_sport = inet->inet_sport;
-	up->pending = AF_INET;
-
-do_append_data:
-	up->len += ulen;
-	err = ip_append_data(sk, fl4, getfrag, msg, ulen,
-			     sizeof(struct udphdr), &ipc, &rt,
-			     corkreq ? msg->msg_flags|MSG_MORE : msg->msg_flags);
-	if (err)
-		udp_flush_pending_frames(sk);
-	else if (!corkreq)
-		err = udp_push_pending_frames(sk);
-	else if (unlikely(skb_queue_empty(&sk->sk_write_queue)))
-		up->pending = 0;
-	release_sock(sk);
+	printk("err = %d\n", err);
 
 out:
 	ip_rt_put(rt);
@@ -384,25 +250,9 @@ out:
 		kfree(ipc.opt);
 	if (!err)
 		return len;
-	/*
-	 * ENOBUFS = no kernel mem, SOCK_NOSPACE = no sndbuf space.  Reporting
-	 * ENOBUFS might not be good (it's not tunable per se), but otherwise
-	 * we don't have a good statistic (IpOutDiscards but it can be too many
-	 * things).  We could add another new stat but at least for now that
-	 * seems like overkill.
-	 */
-	if (err == -ENOBUFS || test_bit(SOCK_NOSPACE, &sk->sk_socket->flags)) {
-		UDP_INC_STATS(sock_net(sk),
-			      UDP_MIB_SNDBUFERRORS, is_udplite);
-	}
+
 	return err;
 
-do_confirm:
-	dst_confirm(&rt->dst);
-	if (!(msg->msg_flags&MSG_PROBE) || len)
-		goto back_from_confirm;
-	err = 0;
-	goto out;
 }
 
 
