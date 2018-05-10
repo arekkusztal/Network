@@ -86,8 +86,8 @@ int SMTP_set_connection(int sd)
 #ifdef TEST
 	memset(username, 0, 32);
 	memset(password, 0, 32);
-    memcpy(username, "arekrtsw", 8);
-    memcpy(password, "orzel5", 6);
+    memcpy(username, "", 8);
+    memcpy(password, "", 6);
 #endif
 
 	/* First response commant should be 220 (Service Ready) */
